@@ -36,9 +36,14 @@ func main() {
 	if err != nil {
 		log.Fatalf("could not get working directory\n%v", err)
 	}
+	gopath := os.Getenv("GOPATH")
 	var workspaceFiles []string
 	var toolversionFiles []string
 	err = filepath.Walk(workingDirectory, func(path string, f os.FileInfo, err error) error {
+		if gopath != "" && path == gopath && f.IsDir() {
+			log.Printf("skipping $GOPATH=%v and contents\n", path)
+			return filepath.SkipDir
+		}
 		if f.IsDir() && (f.Name() == ".git" || f.Name() == "vendor" || f.Name() == "node_modules") {
 			log.Printf("skipping %v and contents\n", path)
 			return filepath.SkipDir
