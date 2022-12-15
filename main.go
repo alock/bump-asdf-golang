@@ -12,13 +12,18 @@ import (
 	"golang.org/x/mod/semver"
 )
 
-const asdfGoRootComponent = `<component name="GOROOT" url="file://$USER_HOME$/.asdf/installs/golang/`
+const (
+	asdfGoRootComponent        = `<component name="GOROOT" url="file://$USER_HOME$/.asdf/installs/golang/`
+	toolversionsFilename       = ".tool-versions"
+	jetbrainsWorkspaceFilename = "workspace.xml"
+)
 
 //var wsFilesNames = []string{"ws.xml"}
 
 var (
-	version   = flag.String("version", "", "new golang version to update")
-	updateAll = flag.Bool("update-all", false, "do not maintain minor versions")
+	version   = flag.String("v", "", "golang version to update the files with")
+	updateAll = flag.Bool("a", false, "do not maintain minor versions, force update all")
+	debugMode = flag.Bool("debug", false, "debug logs to help")
 )
 
 type fileToUpdate struct {
@@ -31,37 +36,35 @@ func main() {
 	if !semver.IsValid(fmt.Sprintf("v%v", *version)) {
 		log.Fatal("version flag is required and must be a valid semver")
 	}
-	fmt.Printf("version: %v, updateAll: %v\n", *version, *updateAll)
+	log.Printf("version: %v, updateAll: %v\n", *version, *updateAll)
 	workingDirectory, err := os.Getwd()
 	if err != nil {
 		log.Fatalf("could not get working directory\n%v", err)
 	}
 	gopath := os.Getenv("GOPATH")
 	var workspaceFiles []string
-	var toolversionFiles []string
+	var toolversionsFiles []string
 	err = filepath.Walk(workingDirectory, func(path string, f os.FileInfo, err error) error {
 		if gopath != "" && path == gopath && f.IsDir() {
-			log.Printf("skipping $GOPATH=%v and contents\n", path)
+			if *debugMode {
+				log.Printf("skipping $GOPATH=%v and contents\n", path)
+			}
 			return filepath.SkipDir
 		}
 		if f.IsDir() && (f.Name() == ".git" || f.Name() == "vendor" || f.Name() == "node_modules") {
-			log.Printf("skipping %v and contents\n", path)
+			if *debugMode {
+				log.Printf("skipping %v and contents\n", path)
+			}
 			return filepath.SkipDir
 		}
-		if f.IsDir() && f.Name() == "mod" {
-			if strings.Contains(path, "pkg") {
-				log.Printf("skipping %v and contents\n", path)
-				return filepath.SkipDir
-			}
-		}
 		if err != nil {
-			fmt.Println(err)
+			log.Println(err)
 			return nil
 		}
-		if f.Name() == ".tool-versions" {
-			toolversionFiles = append(toolversionFiles, path)
+		if f.Name() == toolversionsFilename {
+			toolversionsFiles = append(toolversionsFiles, path)
 		}
-		if f.Name() == "workspace.xml" && strings.Contains(path, ".idea") {
+		if f.Name() == jetbrainsWorkspaceFilename && strings.Contains(path, ".idea") {
 			workspaceFiles = append(workspaceFiles, path)
 		}
 		return nil
@@ -69,8 +72,8 @@ func main() {
 	if err != nil {
 		log.Fatalf("failed to walk the path finding the files\n%v", err)
 	}
+	passedMajorMinor := semver.MajorMinor(fmt.Sprintf("v%v", *version))
 	if len(workspaceFiles) > 0 {
-		passedMajorMinor := semver.MajorMinor(fmt.Sprintf("v%v", *version))
 		var wsFilesToUpdate []fileToUpdate
 		for _, wsFileName := range workspaceFiles {
 			workspaceFileContent, err := os.Open(wsFileName)
@@ -88,10 +91,12 @@ func main() {
 					currentSemVer := strings.Split(scanner.Text(), "/")[6]
 					majorMinor := semver.MajorMinor(fmt.Sprintf("v%v", currentSemVer))
 					if *updateAll || passedMajorMinor == majorMinor {
-						wsFilesToUpdate = append(wsFilesToUpdate, fileToUpdate{
-							filePathAndName:      wsFileName,
-							currentGolangVersion: currentSemVer,
-						})
+						if *version != currentSemVer {
+							wsFilesToUpdate = append(wsFilesToUpdate, fileToUpdate{
+								filePathAndName:      wsFileName,
+								currentGolangVersion: currentSemVer,
+							})
+						}
 					}
 				}
 			}
@@ -102,8 +107,8 @@ func main() {
 		}
 	}
 	//make smarter since it's almost the same process
-	//if len(toolversionFiles) > 0 {
-	//	fmt.Println("tool-versions files:")
-	//	fmt.Println(strings.Join(toolversionFiles, "\n"))
-	//}
+	if len(toolversionsFiles) > 0 {
+		fmt.Println("tool-versions files:")
+		fmt.Println(strings.Join(toolversionsFiles, "\n"))
+	}
 }
