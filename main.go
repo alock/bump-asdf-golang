@@ -27,7 +27,7 @@ var (
 )
 
 type fileToUpdate struct {
-	filePathAndName      string // maybe mage a file object
+	filePathAndName      string // maybe make a file object
 	currentGolangVersion string
 }
 
@@ -108,7 +108,31 @@ func main() {
 	}
 	//make smarter since it's almost the same process
 	if len(toolversionsFiles) > 0 {
-		fmt.Println("tool-versions files:")
-		fmt.Println(strings.Join(toolversionsFiles, "\n"))
+		var asdfFilesToUpdate []fileToUpdate
+		for _, asdfFileName := range toolversionsFiles {
+			asdfFileContent, err := os.Open(asdfFileName)
+			if err != nil {
+				log.Fatal(err)
+			}
+			scanner := bufio.NewScanner(asdfFileContent)
+			for scanner.Scan() {
+				if strings.Contains(scanner.Text(), "golang ") {
+					currentSemVer := strings.Split(scanner.Text(), " ")[1]
+					majorMinor := semver.MajorMinor(fmt.Sprintf("v%v", currentSemVer))
+					if *updateAll || passedMajorMinor == majorMinor {
+						if *version != currentSemVer {
+							asdfFilesToUpdate = append(asdfFilesToUpdate, fileToUpdate{
+								filePathAndName:      asdfFileName,
+								currentGolangVersion: currentSemVer,
+							})
+						}
+					}
+				}
+			}
+		}
+		fmt.Printf("%v files to update\n", len(asdfFilesToUpdate))
+		for _, fileToBump := range asdfFilesToUpdate {
+			fmt.Printf("%v: %v\n", fileToBump.filePathAndName, fileToBump.currentGolangVersion)
+		}
 	}
 }
