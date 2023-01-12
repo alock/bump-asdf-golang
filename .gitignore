@@ -18,4 +18,4 @@ go.work
 /bump-asdf-golang
 
 # Test File
-ws.xml
+/test/*
