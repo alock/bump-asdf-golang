@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"unicode"
 
 	"golang.org/x/mod/semver"
 )
@@ -33,7 +34,7 @@ type fileToUpdate struct {
 func main() {
 	flag.Parse()
 	if !semver.IsValid(fmt.Sprintf("v%v", *version)) {
-		log.Fatal("version flag is required and must be a valid semver")
+		log.Fatalln("version flag is required and must be a valid semver")
 	}
 	log.Printf("version: %v, updateAll: %v\n", *version, *updateAll)
 	workspaceFiles, toolversionsFiles := findFilesToUpdate()
@@ -52,6 +53,9 @@ func main() {
 		fmt.Printf("%v files to update\n", len(wsFilesToUpdate))
 		for _, fileToBump := range wsFilesToUpdate {
 			fmt.Printf("%v: %v\n", fileToBump.filePathAndName, fileToBump.currentGolangVersion)
+			if yesNo(fmt.Sprintf("Do you want to update these files to use golang %s?", *version)) {
+				rewriteFile(fileToBump)
+			}
 		}
 	}
 
@@ -69,6 +73,9 @@ func main() {
 		fmt.Printf("%v files to update\n", len(asdfFilesToUpdate))
 		for _, fileToBump := range asdfFilesToUpdate {
 			fmt.Printf("%v: %v\n", fileToBump.filePathAndName, fileToBump.currentGolangVersion)
+			if yesNo(fmt.Sprintf("Do you want to update these files to use golang %s?", *version)) {
+				rewriteFile(fileToBump)
+			}
 		}
 	}
 }
@@ -123,7 +130,7 @@ func findFilesToUpdate() (workspaceFiles, toolversionsFiles []fileToUpdate) {
 func getCurrentVersion(filePathAndName string) string {
 	fileContent, err := os.Open(filePathAndName)
 	if err != nil {
-		log.Fatal(err)
+		log.Fatalln(err)
 	}
 	scanner := bufio.NewScanner(fileContent)
 	for scanner.Scan() {
@@ -144,7 +151,7 @@ func getCurrentVersion(filePathAndName string) string {
 func rewriteFile(file fileToUpdate) {
 	fileContents, err := os.ReadFile(file.filePathAndName)
 	if err != nil {
-		log.Fatal(err)
+		log.Fatalln(err)
 	}
 	var updatedFileContents string
 	if strings.Contains(file.filePathAndName, jetbrainsWorkspaceFilename) {
@@ -157,5 +164,27 @@ func rewriteFile(file fileToUpdate) {
 			fmt.Sprintf("%s%s", golangSpace, file.currentGolangVersion),
 			fmt.Sprintf("%s%s", golangSpace, *version), 1)
 	}
-	os.WriteFile(file.filePathAndName, []byte(updatedFileContents), 0644)
+	err = os.WriteFile(file.filePathAndName, []byte(updatedFileContents), 0644)
+	if err != nil {
+		log.Fatalln(err)
+	}
+}
+
+func yesNo(s string) bool {
+	for {
+		fmt.Printf("%s [y/n] ", s)
+		reader := bufio.NewReader(os.Stdin)
+		input, _, err := reader.ReadRune()
+		if err != nil {
+			log.Fatalln(err)
+		}
+		switch unicode.ToLower(input) {
+		case 'y':
+			return true
+		case 'n':
+			return false
+		default:
+			log.Fatalf("invalid keypress\n")
+		}
+	}
 }
