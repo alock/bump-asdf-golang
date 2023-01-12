@@ -26,7 +26,7 @@ var (
 	debugMode = flag.Bool("debug", false, "debug logs to help")
 )
 
-type fileToUpdate struct {
+type fileInfo struct {
 	filePathAndName      string // maybe make a file object
 	currentGolangVersion string
 }
@@ -37,53 +37,19 @@ func main() {
 		log.Fatalln("version flag is required and must be a valid semver")
 	}
 	log.Printf("version: %v, updateAll: %v\n", *version, *updateAll)
-	workspaceFiles, toolversionsFiles := findFilesToUpdate()
-
-	passedMajorMinor := semver.MajorMinor(fmt.Sprintf("v%v", *version))
-	if len(workspaceFiles) > 0 {
-		var wsFilesToUpdate []fileToUpdate
-		for _, wsFileName := range workspaceFiles {
-			majorMinor := semver.MajorMinor(fmt.Sprintf("v%v", wsFileName.currentGolangVersion))
-			if *updateAll || passedMajorMinor == majorMinor {
-				if *version != wsFileName.currentGolangVersion {
-					wsFilesToUpdate = append(wsFilesToUpdate, wsFileName)
-				}
-			}
-		}
-		fmt.Printf("%v files to update\n", len(wsFilesToUpdate))
-		for _, fileToBump := range wsFilesToUpdate {
-			fmt.Printf("%v: %v\n", fileToBump.filePathAndName, fileToBump.currentGolangVersion)
-			if yesNo(fmt.Sprintf("Do you want to update these files to use golang %s?", *version)) {
-				rewriteFile(fileToBump)
-			}
-		}
-	}
-
-	//make smarter since it's almost the same process
-	if len(toolversionsFiles) > 0 {
-		var asdfFilesToUpdate []fileToUpdate
-		for _, asdfFileName := range toolversionsFiles {
-			majorMinor := semver.MajorMinor(fmt.Sprintf("v%v", asdfFileName.currentGolangVersion))
-			if *updateAll || passedMajorMinor == majorMinor {
-				if *version != asdfFileName.currentGolangVersion {
-					asdfFilesToUpdate = append(asdfFilesToUpdate, asdfFileName)
-				}
-			}
-		}
-		fmt.Printf("%v files to update\n", len(asdfFilesToUpdate))
-		for _, fileToBump := range asdfFilesToUpdate {
-			fmt.Printf("%v: %v\n", fileToBump.filePathAndName, fileToBump.currentGolangVersion)
-			if yesNo(fmt.Sprintf("Do you want to update these files to use golang %s?", *version)) {
-				rewriteFile(fileToBump)
-			}
-		}
-	}
+	workspaceFiles, toolversionsFiles := findPotentialFilesToUpdate()
+	handlePotentialFilesToUpdate(workspaceFiles)
+	handlePotentialFilesToUpdate(toolversionsFiles)
 }
 
-func findFilesToUpdate() (workspaceFiles, toolversionsFiles []fileToUpdate) {
+func findPotentialFilesToUpdate() (workspaceFiles, toolversionsFiles []fileInfo) {
 	workingDirectory, err := os.Getwd()
 	if err != nil {
 		log.Fatalf("could not get working directory\n%v", err)
+	}
+	usersHomeDir, err := os.UserHomeDir()
+	if err != nil {
+		log.Fatalf("could not get users home directory\n%v", err)
 	}
 	gopath := os.Getenv("GOPATH")
 	err = filepath.Walk(workingDirectory, func(path string, f os.FileInfo, err error) error {
@@ -91,14 +57,21 @@ func findFilesToUpdate() (workspaceFiles, toolversionsFiles []fileToUpdate) {
 			log.Println(err)
 			return nil
 		}
-
-		// do not process some files
+		// do not process gopath files
 		if gopath != "" && path == gopath && f.IsDir() {
 			if *debugMode {
 				log.Printf("skipping $GOPATH=%v and contents\n", path)
 			}
 			return filepath.SkipDir
 		}
+		// skip ~/Library
+		if path == fmt.Sprintf("%s/Library", usersHomeDir) && f.IsDir() {
+			if *debugMode {
+				log.Printf("skipping %v and contents\n", path)
+			}
+			return filepath.SkipDir
+		}
+		// skip dev folders
 		if f.IsDir() && (f.Name() == ".git" || f.Name() == "vendor" || f.Name() == "node_modules") {
 			if *debugMode {
 				log.Printf("skipping %v and contents\n", path)
@@ -106,15 +79,21 @@ func findFilesToUpdate() (workspaceFiles, toolversionsFiles []fileToUpdate) {
 			return filepath.SkipDir
 		}
 		if f.Name() == toolversionsFilename {
+			if path == fmt.Sprintf("%s/%s", usersHomeDir, toolversionsFilename) {
+				if *debugMode {
+					log.Printf("skipping global tools-version file: %s\n", path)
+				}
+				return nil
+			}
 			currentVersion := getCurrentVersion(path)
-			toolversionsFiles = append(toolversionsFiles, fileToUpdate{
+			toolversionsFiles = append(toolversionsFiles, fileInfo{
 				filePathAndName:      path,
 				currentGolangVersion: currentVersion,
 			})
 		}
 		if f.Name() == jetbrainsWorkspaceFilename && strings.Contains(path, ".idea") {
 			currentVersion := getCurrentVersion(path)
-			workspaceFiles = append(workspaceFiles, fileToUpdate{
+			workspaceFiles = append(workspaceFiles, fileInfo{
 				filePathAndName:      path,
 				currentGolangVersion: currentVersion,
 			})
@@ -148,7 +127,39 @@ func getCurrentVersion(filePathAndName string) string {
 	return ""
 }
 
-func rewriteFile(file fileToUpdate) {
+func getFilesToUpdate(version string, allFilesFound []fileInfo) (filesToUpdate []fileInfo) {
+	passedMajorMinor := semver.MajorMinor(fmt.Sprintf("v%v", version))
+	for _, f := range allFilesFound {
+		majorMinor := semver.MajorMinor(fmt.Sprintf("v%v", f.currentGolangVersion))
+		if *updateAll || passedMajorMinor == majorMinor {
+			if version != f.currentGolangVersion {
+				filesToUpdate = append(filesToUpdate, f)
+			}
+		}
+	}
+	return
+}
+
+func handlePotentialFilesToUpdate(potentialFilesToUpdate []fileInfo) {
+	filesToUpdate := getFilesToUpdate(*version, potentialFilesToUpdate)
+	printFilesAndCurrentVersion(filesToUpdate)
+	fmt.Printf("%v file(s) to update\n", len(filesToUpdate))
+	if len(filesToUpdate) > 0 {
+		if yesNo(fmt.Sprintf("Do you want to update the files above to use golang %s?", *version)) {
+			for _, fileToBump := range filesToUpdate {
+				rewriteFile(fileToBump)
+			}
+		}
+	}
+}
+
+func printFilesAndCurrentVersion(files []fileInfo) {
+	for _, f := range files {
+		fmt.Printf("%v: %v\n", f.filePathAndName, f.currentGolangVersion)
+	}
+}
+
+func rewriteFile(file fileInfo) {
 	fileContents, err := os.ReadFile(file.filePathAndName)
 	if err != nil {
 		log.Fatalln(err)
