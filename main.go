@@ -7,6 +7,7 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"unicode"
 
@@ -22,7 +23,8 @@ const (
 
 var (
 	version   = flag.String("v", "", "golang version to update the files with")
-	updateAll = flag.Bool("a", false, "do not maintain minor versions, force update all")
+	updateAll = flag.Bool("all", false, "do not maintain minor versions, force update all")
+	minorBump = flag.Bool("minor", false, "flag to use when moving minor versions like 1.19.X to 1.20")
 	debugMode = flag.Bool("debug", false, "debug logs to help")
 )
 
@@ -36,7 +38,10 @@ func main() {
 	if !semver.IsValid(fmt.Sprintf("v%v", *version)) {
 		log.Fatalln("version flag is required and must be a valid semver")
 	}
-	log.Printf("version: %v, updateAll: %v\n", *version, *updateAll)
+	if *updateAll && *minorBump {
+		log.Fatalln("both flags \"minor\" and \"all\" cannot be set, please use one only")
+	}
+	log.Printf("version: %v, updateAll: %v, minorBump: %v\n", *version, *updateAll, *minorBump)
 	workspaceFiles, toolversionsFiles := findPotentialFilesToUpdate()
 	handlePotentialFilesToUpdate(workspaceFiles)
 	handlePotentialFilesToUpdate(toolversionsFiles)
@@ -129,9 +134,18 @@ func getCurrentVersion(filePathAndName string) string {
 
 func getFilesToUpdate(version string, allFilesFound []fileInfo) (filesToUpdate []fileInfo) {
 	passedMajorMinor := semver.MajorMinor(fmt.Sprintf("v%v", version))
+	versionMinorMinusOne := ""
+	if *minorBump {
+		splitMajorMinor := strings.Split(passedMajorMinor, ".")
+		minor, err := strconv.Atoi(splitMajorMinor[1])
+		if err != nil {
+			log.Fatalf("cannot calcuate minor version")
+		}
+		versionMinorMinusOne = semver.MajorMinor(fmt.Sprintf("%s.%v", splitMajorMinor[0], minor-1))
+	}
 	for _, f := range allFilesFound {
 		majorMinor := semver.MajorMinor(fmt.Sprintf("v%v", f.currentGolangVersion))
-		if (*updateAll && f.currentGolangVersion != "") || passedMajorMinor == majorMinor {
+		if (*updateAll && f.currentGolangVersion != "") || passedMajorMinor == majorMinor || (*minorBump && majorMinor == versionMinorMinusOne) {
 			if version != f.currentGolangVersion {
 				filesToUpdate = append(filesToUpdate, f)
 			}
