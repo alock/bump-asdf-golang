@@ -15,7 +15,9 @@ import (
 )
 
 const (
-	asdfGoRootComponent        = `<component name="GOROOT" url="file://$USER_HOME$/.asdf/installs/golang/`
+	//asdfGoRootComponent         = `<component name="GOROOT" url="file://$USER_HOME$/.asdf/installs/golang/`
+	//miseMaskasdfGoRootComponent = `<component name="GOROOT" url="file://$USER_HOME$/.asdf/installs/go/`
+	miseInstallComponent       = `<component name="GOROOT" url="file://$USER_HOME$/.local/share/mise/installs/go/`
 	golangSpace                = "golang "
 	toolversionsFilename       = ".tool-versions"
 	jetbrainsWorkspaceFilename = "workspace.xml"
@@ -119,7 +121,7 @@ func getCurrentVersion(filePathAndName string) string {
 	scanner := bufio.NewScanner(fileContent)
 	for scanner.Scan() {
 		if strings.Contains(filePathAndName, jetbrainsWorkspaceFilename) {
-			if strings.Contains(scanner.Text(), asdfGoRootComponent) {
+			if strings.Contains(scanner.Text(), miseInstallComponent) {
 				return strings.Split(scanner.Text(), "/")[6]
 			}
 		}
@@ -181,8 +183,8 @@ func rewriteFile(file fileInfo) {
 	var updatedFileContents string
 	if strings.Contains(file.filePathAndName, jetbrainsWorkspaceFilename) {
 		updatedFileContents = strings.Replace(string(fileContents),
-			fmt.Sprintf("%s%s/go", asdfGoRootComponent, file.currentGolangVersion),
-			fmt.Sprintf("%s%s/go", asdfGoRootComponent, *version), 1)
+			fmt.Sprintf("%s%s/go", miseInstallComponent, file.currentGolangVersion),
+			fmt.Sprintf("%s%s/go", miseInstallComponent, *version), 1)
 	}
 	if strings.Contains(file.filePathAndName, toolversionsFilename) {
 		updatedFileContents = strings.Replace(string(fileContents),
