@@ -15,19 +15,21 @@ import (
 )
 
 const (
-	//asdfGoRootComponent         = `<component name="GOROOT" url="file://$USER_HOME$/.asdf/installs/golang/`
-	//miseMaskasdfGoRootComponent = `<component name="GOROOT" url="file://$USER_HOME$/.asdf/installs/go/`
-	miseInstallComponent       = `<component name="GOROOT" url="file://$USER_HOME$/.local/share/mise/installs/go/`
+	//asdfGoInstallPath          = `.asdf/installs/golang/`
+	//miseAsdfGoSymlink          = `.asdf/installs/go/`
+	miseGoInstallPath          = `.local/share/mise/installs/go/`
+	jetbrainsIdeaMarker        = `<component name="GOROOT" url="file://$USER_HOME$/`
 	golangSpace                = "golang "
 	toolversionsFilename       = ".tool-versions"
 	jetbrainsWorkspaceFilename = "workspace.xml"
 )
 
 var (
-	version   = flag.String("v", "", "golang version to update the files with")
-	updateAll = flag.Bool("all", false, "do not maintain minor versions, force update all")
-	minorBump = flag.Bool("minor", false, "flag to use when moving minor versions like 1.19.X to 1.20")
-	debugMode = flag.Bool("debug", false, "debug logs to help")
+	version                    = flag.String("v", "", "golang version to update the files with")
+	updateAll                  = flag.Bool("all", false, "do not maintain minor versions, force update all")
+	minorBump                  = flag.Bool("minor", false, "flag to use when moving minor versions like 1.19.X to 1.20")
+	debugMode                  = flag.Bool("debug", false, "debug logs to help")
+	ideaWorkspacePlusGoInstall = fmt.Sprintf("%s%s", jetbrainsIdeaMarker, miseGoInstallPath)
 )
 
 type fileInfo struct {
@@ -121,8 +123,10 @@ func getCurrentVersion(filePathAndName string) string {
 	scanner := bufio.NewScanner(fileContent)
 	for scanner.Scan() {
 		if strings.Contains(filePathAndName, jetbrainsWorkspaceFilename) {
-			if strings.Contains(scanner.Text(), miseInstallComponent) {
-				return strings.Split(scanner.Text(), "/")[6]
+			if strings.Contains(scanner.Text(), ideaWorkspacePlusGoInstall) {
+				// calculate the 8 from split miseGoInstallPath by / + 3
+				// file://$USER_HOME$/.local/share/mise/installs/go/1.22.4/go
+				return strings.Split(scanner.Text(), "/")[8]
 			}
 		}
 		if strings.Contains(filePathAndName, toolversionsFilename) {
@@ -183,8 +187,8 @@ func rewriteFile(file fileInfo) {
 	var updatedFileContents string
 	if strings.Contains(file.filePathAndName, jetbrainsWorkspaceFilename) {
 		updatedFileContents = strings.Replace(string(fileContents),
-			fmt.Sprintf("%s%s/go", miseInstallComponent, file.currentGolangVersion),
-			fmt.Sprintf("%s%s/go", miseInstallComponent, *version), 1)
+			fmt.Sprintf("%s%s/go", ideaWorkspacePlusGoInstall, file.currentGolangVersion),
+			fmt.Sprintf("%s%s/go", ideaWorkspacePlusGoInstall, *version), 1)
 	}
 	if strings.Contains(file.filePathAndName, toolversionsFilename) {
 		updatedFileContents = strings.Replace(string(fileContents),
