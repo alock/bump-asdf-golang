@@ -125,7 +125,7 @@ func getCurrentVersion(filePathAndName string) string {
 		if strings.Contains(filePathAndName, jetbrainsWorkspaceFilename) {
 			if strings.Contains(scanner.Text(), ideaWorkspacePlusGoInstall) {
 				// calculate the 8 from split miseGoInstallPath by / + 3
-				// file://$USER_HOME$/.local/share/mise/installs/go/1.22.4/go
+				// file://$USER_HOME$/.local/share/mise/installs/go/1.22.5
 				return strings.Split(scanner.Text(), "/")[8]
 			}
 		}
@@ -187,8 +187,8 @@ func rewriteFile(file fileInfo) {
 	var updatedFileContents string
 	if strings.Contains(file.filePathAndName, jetbrainsWorkspaceFilename) {
 		updatedFileContents = strings.Replace(string(fileContents),
-			fmt.Sprintf("%s%s/go", ideaWorkspacePlusGoInstall, file.currentGolangVersion),
-			fmt.Sprintf("%s%s/go", ideaWorkspacePlusGoInstall, *version), 1)
+			fmt.Sprintf("%s%s", ideaWorkspacePlusGoInstall, file.currentGolangVersion),
+			fmt.Sprintf("%s%s", ideaWorkspacePlusGoInstall, *version), 1)
 	}
 	if strings.Contains(file.filePathAndName, toolversionsFilename) {
 		updatedFileContents = strings.Replace(string(fileContents),
