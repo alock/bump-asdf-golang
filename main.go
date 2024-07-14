@@ -125,8 +125,10 @@ func getCurrentVersion(filePathAndName string) string {
 		if strings.Contains(filePathAndName, jetbrainsWorkspaceFilename) {
 			if strings.Contains(scanner.Text(), ideaWorkspacePlusGoInstall) {
 				// calculate the 8 from split miseGoInstallPath by / + 3
-				// file://$USER_HOME$/.local/share/mise/installs/go/1.22.5
-				return strings.Split(scanner.Text(), "/")[8]
+				// file://$USER_HOME$/.local/share/mise/installs/go/1.22.5"
+				versionPlusDouble := strings.Split(scanner.Text(), "/")[8]
+				// hackery since the scrape above is pulling in 2 characters (guessing " and newline)
+				return versionPlusDouble[:len(versionPlusDouble)-2]
 			}
 		}
 		if strings.Contains(filePathAndName, toolversionsFilename) {
@@ -152,6 +154,9 @@ func getFilesToUpdate(version string, allFilesFound []fileInfo) (filesToUpdate [
 	for _, f := range allFilesFound {
 		majorMinor := semver.MajorMinor(fmt.Sprintf("v%v", f.currentGolangVersion))
 		if (*updateAll && f.currentGolangVersion != "") || passedMajorMinor == majorMinor || (*minorBump && majorMinor == versionMinorMinusOne) {
+			log.Println(version)
+			log.Println(f.currentGolangVersion)
+			log.Println(version != f.currentGolangVersion)
 			if version != f.currentGolangVersion {
 				filesToUpdate = append(filesToUpdate, f)
 			}
