@@ -154,9 +154,6 @@ func getFilesToUpdate(version string, allFilesFound []fileInfo) (filesToUpdate [
 	for _, f := range allFilesFound {
 		majorMinor := semver.MajorMinor(fmt.Sprintf("v%v", f.currentGolangVersion))
 		if (*updateAll && f.currentGolangVersion != "") || passedMajorMinor == majorMinor || (*minorBump && majorMinor == versionMinorMinusOne) {
-			log.Println(version)
-			log.Println(f.currentGolangVersion)
-			log.Println(version != f.currentGolangVersion)
 			if version != f.currentGolangVersion {
 				filesToUpdate = append(filesToUpdate, f)
 			}
